@@ -1,5 +1,6 @@
 const Comment = require("../models/comment");
 const Ticket = require("../models/ticket");
+const logActivity = require("../utils/activitylogger");
 
 exports.addComment = async (req, res) => {
   try {

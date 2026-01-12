@@ -16,6 +16,8 @@ router.get("/profile", authMiddleware, (req, res) => {
 router.use("/auth", require("./auth.routes"));
 router.use("/tickets", require("./ticket.routes"));
 router.use("/comments", require("./comment.routes"));
+router.use("/activity", require("./activity.routes"));
+
 
 
 module.exports = router;

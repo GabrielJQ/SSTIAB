@@ -1,4 +1,6 @@
 const Ticket = require("../models/ticket");
+const logActivity = require("../utils/activitylogger");
+
 
 exports.createTicket = async (req, res) => {
   try {
