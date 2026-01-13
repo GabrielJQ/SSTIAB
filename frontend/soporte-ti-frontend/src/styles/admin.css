@@ -1,0 +1,47 @@
+.container {
+  padding: 20px;
+}
+
+h2 {
+  margin-bottom: 15px;
+}
+
+.tickets-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tickets-table th,
+.tickets-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+.tickets-table th {
+  background: #f4f4f4;
+}
+
+.status.open {
+  color: #b45309;
+}
+
+.status.in-progress {
+  color: #2563eb;
+}
+
+.status.closed {
+  color: #15803d;
+}
+
+.priority.high {
+  color: #dc2626;
+}
+
+.priority.medium {
+  color: #ca8a04;
+}
+
+.priority.low {
+  color: #16a34a;
+}

@@ -1,0 +1,41 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: #111;
+  border-bottom: 1px solid #333;
+}
+
+.navbar h3 {
+  color: #4f7cff;
+}
+
+.nav-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.nav-links a {
+  color: #ddd;
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  color: #4f7cff;
+}
+
+.user {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+button {
+  background: #4f7cff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+}
