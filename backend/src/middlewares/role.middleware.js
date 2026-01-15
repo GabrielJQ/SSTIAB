@@ -1,10 +1,11 @@
-const roleMiddleware = (...allowedRoles) => {
+module.exports = (...roles) => {
   return (req, res, next) => {
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Acceso denegado" });
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: "No tienes permisos"
+      });
     }
     next();
   };
 };
 
-module.exports = roleMiddleware;

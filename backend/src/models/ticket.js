@@ -1,38 +1,120 @@
 const mongoose = require("mongoose");
 
-const ticketSchema = new mongoose.Schema(
+const TicketSchema = new mongoose.Schema(
   {
-    title: {
+    ticketNumber: {
       type: String,
-      required: true,
-      trim: true,
+      unique: true,
+      index: true
     },
+
+    // ========================
+    // DATOS DEL PROBLEMA
+    // ========================
     description: {
       type: String,
-      required: true,
+      required: true
     },
-    status: {
+
+    category: {
       type: String,
-      enum: ["open", "in_progress", "closed"],
-      default: "open",
+      enum: [
+        "hardware",
+        "software",
+        "network",
+        "printer",
+        "access",
+        "other"
+      ],
+      default: "other"
     },
+
     priority: {
       type: String,
-      enum: ["low", "medium", "high"],
-      default: "medium",
+      enum: ["low", "medium", "high", "critical"],
+      default: "medium"
     },
-    user: {
+
+    status: {
+      type: String,
+      enum: ["open", "in_progress", "resolved", "closed"],
+      default: "open"
+    },
+
+    // ========================
+    // DATOS DEL USUARIO (FIJOS)
+    // ========================
+    department: {
+      type: String,
+      required: true
+    },
+
+    requesterSnapshot: {
+      name: String,
+      employeeNumber: String,
+      department: String,
+      unit: String
+    },
+
+    // ========================
+    // RELACIONES
+    // ========================
+    createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: true
     },
+
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null,
+      default: null
     },
+
+    // ========================
+    // FECHAS
+    // ========================
+    resolvedAt: Date,
+    closedAt: Date,
+
+    // ========================
+    // COMENTARIOS
+    // ========================
+   comments: [
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+
+    role: {
+      type: String,
+      enum: ["user", "agent", "admin"],
+      required: true
+    },
+
+    message: {
+      type: String,
+      required: true
+    },
+
+    isInternal: {
+      type: Boolean,
+      default: false // solo admin/agent pueden verlo
+    },
+
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }
+]
+
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Ticket", ticketSchema);
+module.exports = mongoose.model("Ticket", TicketSchema);
+
+
