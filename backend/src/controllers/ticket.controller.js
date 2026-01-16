@@ -305,7 +305,7 @@ exports.getTicketById = async (req, res) => {
       return res.status(403).json({ message: "No autorizado" });
     }
 
-    // 🚫 Filtrar comentarios internos para usuarios
+    //  Filtrar comentarios internos para usuarios
     let filteredTicket = ticket.toObject();
 
     if (req.user.role === "user") {
