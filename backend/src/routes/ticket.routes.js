@@ -12,7 +12,8 @@ const {
   getAllTickets,
   assignTicket,
   addComment,
-  getTicketById
+  getTicketById,
+  getTicketComments
 } = require("../controllers/ticket.controller");
 
 // ========================
@@ -37,15 +38,6 @@ router.patch(
   roleMiddleware("agent", "admin"),
   updateTicketStatus
 );
-// ========================
-// VER TICKET INDIVIDUAL
-// ========================
-router.get(
-  "/:id",
-  authMiddleware,
-  getTicketById
-);
-
 
 // ========================
 // ADMIN
@@ -65,6 +57,11 @@ router.patch(
 );
 
 // ========================
+// TICKET INDIVIDUAL
+// ========================
+router.get("/:id", authMiddleware, getTicketById);
+
+// ========================
 // COMMENTS
 // ========================
 router.post(
@@ -73,6 +70,14 @@ router.post(
   addComment
 );
 
+// ========================
+// VER COMENTARIOS DE TICKET
+// ========================
+router.get(
+  "/:id/comments",
+  authMiddleware,
+  getTicketComments
+);
+
+
 module.exports = router;
-
-

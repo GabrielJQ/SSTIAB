@@ -1,26 +1,53 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const User = require("../models/user.js");
+const User = require("../models/user");
 
+// ========================
+// REGISTER
+// ========================
 exports.register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      name,
+      email,
+      password,
+      employeeNumber,
+      unit,
+      department,
+      role // opcional, solo admin debería usarlo
+    } = req.body;
 
-    // Verificar usuario existente
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ message: "El usuario ya existe" });
+    // Validación básica
+    if (
+      !name ||
+      !email ||
+      !password ||
+      !employeeNumber ||
+      !unit ||
+      !department
+    ) {
+      return res.status(400).json({
+        message: "Todos los campos son obligatorios"
+      });
     }
 
-    // Encriptar contraseña
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({
+        message: "El usuario ya existe"
+      });
+    }
 
-    // Crear usuario
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
+      employeeNumber,
+      unit,
+      department,
+      role: role || "user" // por defecto user
     });
 
     res.status(201).json({
@@ -29,37 +56,56 @@ exports.register = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-      },
+        employeeNumber: user.employeeNumber,
+        unit: user.unit,
+        department: user.department,
+        role: user.role
+      }
     });
   } catch (error) {
-  console.error("ERROR REGISTER 👉", error);
-  res.status(500).json({
-    message: "Error interno en registro",
-    error: error.message,
-  });
-}
+    console.error("ERROR REGISTER 👉", error);
+    res.status(500).json({
+      message: "Error interno en registro"
+    });
+  }
 };
 
+// ========================
+// LOGIN
+// ========================
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email y password requeridos"
+      });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: "Credenciales inválidas" });
+      return res.status(400).json({
+        message: "Credenciales inválidas"
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Credenciales inválidas" });
+      return res.status(400).json({
+        message: "Credenciales inválidas"
+      });
     }
 
-    // Crear token
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      {
+        id: user._id,
+        role: user.role
+      },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || "8h"
+      }
     );
 
     res.json({
@@ -69,10 +115,16 @@ exports.login = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-      },
+        employeeNumber: user.employeeNumber,
+        unit: user.unit,
+        department: user.department,
+        role: user.role
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: "Error en login", error });
+    console.error("ERROR LOGIN 👉", error);
+    res.status(500).json({
+      message: "Error en login"
+    });
   }
 };

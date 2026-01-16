@@ -2,6 +2,9 @@ const mongoose = require("mongoose");
 
 const TicketSchema = new mongoose.Schema(
   {
+    // ========================
+    // IDENTIFICADOR
+    // ========================
     ticketNumber: {
       type: String,
       unique: true,
@@ -26,7 +29,7 @@ const TicketSchema = new mongoose.Schema(
         "access",
         "other"
       ],
-      default: "other"
+      required: true
     },
 
     priority: {
@@ -42,7 +45,7 @@ const TicketSchema = new mongoose.Schema(
     },
 
     // ========================
-    // DATOS DEL USUARIO (FIJOS)
+    // DATOS DEL USUARIO (SNAPSHOT)
     // ========================
     department: {
       type: String,
@@ -78,43 +81,47 @@ const TicketSchema = new mongoose.Schema(
     closedAt: Date,
 
     // ========================
-    // COMENTARIOS
+    // HISTORIAL DE ESTADOS
     // ========================
-   comments: [
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: ["open", "in_progress", "resolved", "closed"]
+        },
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User"
+        },
+        changedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
 
-    role: {
-      type: String,
-      enum: ["user", "agent", "admin"],
-      required: true
-    },
-
-    message: {
-      type: String,
-      required: true
-    },
-
-    isInternal: {
-      type: Boolean,
-      default: false // solo admin/agent pueden verlo
-    },
-
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  }
-]
-
+    // ========================
+    // COMENTARIOS (CORREGIDO)
+    // ========================
+    comments: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true
+        },
+        message: {
+          type: String,
+          required: true
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ]
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model("Ticket", TicketSchema);
-
-

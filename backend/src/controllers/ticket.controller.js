@@ -1,5 +1,6 @@
 const Ticket = require("../models/ticket");
 const logActivity = require("../utils/activitylogger");
+const { ticketUserDTO } = require("../dtos/ticket.dto");
 
 // ========================
 // USER
@@ -8,37 +9,65 @@ const logActivity = require("../utils/activitylogger");
 // Crear ticket
 exports.createTicket = async (req, res) => {
   try {
+    const user = req.user;
+    const { description, category } = req.body;
+
+    if (!description || !category) {
+      return res.status(400).json({
+        message: "Descripción y categoría son obligatorias"
+      });
+    }
+
     const ticket = await Ticket.create({
-      description: req.body.description,
-      department: req.user.department,
-      createdBy: req.user._id,
+      description,
+      category,
       priority: "medium",
-      status: "open"
+      status: "open",
+
+      department: user.department,
+
+      requesterSnapshot: {
+        name: user.name,
+        employeeNumber: user.employeeNumber,
+        unit: user.unit,
+        department: user.department
+      },
+
+      createdBy: user._id
     });
 
     await logActivity(
-      req.user._id,
+      user._id,
       "CREATE_TICKET",
       ticket._id,
-      "Ticket creado por usuario"
+      `Ticket creado en categoría ${category}`
     );
 
     res.status(201).json(ticket);
   } catch (error) {
-    res.status(500).json({ message: "Error creando ticket", error });
+    console.error("ERROR CREATE TICKET 👉", error);
+    res.status(500).json({
+      message: "Error creando ticket"
+    });
   }
 };
+
+
 
 // Ver MIS tickets
 exports.getMyTickets = async (req, res) => {
   try {
     const tickets = await Ticket.find({ createdBy: req.user._id })
-      .sort({ createdAt: -1 })
-      .populate("assignedTo", "name email role");
+      .sort({ createdAt: -1 });
 
-    res.json(tickets);
+    res.json({
+      total: tickets.length,
+      tickets: tickets.map(ticketUserDTO)
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error obteniendo tickets", error });
+    res.status(500).json({
+      message: "Error obteniendo tickets"
+    });
   }
 };
 
@@ -167,14 +196,14 @@ exports.assignTicket = async (req, res) => {
 // Agregar comentario
 exports.addComment = async (req, res) => {
   try {
-    const { message, isInternal = false } = req.body;
+    const { message } = req.body;
 
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) {
       return res.status(404).json({ message: "Ticket no encontrado" });
     }
 
-    // Permisos
+    // Permisos: admin, agent asignado o creador
     if (
       req.user.role === "user" &&
       ticket.createdBy.toString() !== req.user._id.toString()
@@ -182,22 +211,9 @@ exports.addComment = async (req, res) => {
       return res.status(403).json({ message: "No autorizado" });
     }
 
-    if (
-      req.user.role === "agent" &&
-      ticket.assignedTo?.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
-
-    if (req.user.role === "user" && isInternal) {
-      return res.status(403).json({ message: "Comentario interno no permitido" });
-    }
-
     ticket.comments.push({
       user: req.user._id,
-      role: req.user.role,
-      message,
-      isInternal
+      message
     });
 
     await ticket.save();
@@ -206,14 +222,58 @@ exports.addComment = async (req, res) => {
       req.user._id,
       "ADD_COMMENT",
       ticket._id,
-      isInternal ? "Comentario interno" : "Comentario público"
+      "Comentario agregado"
     );
 
-    res.json(ticket);
+    res.status(201).json({
+      message: "Comentario agregado",
+      comments: ticket.comments
+    });
   } catch (error) {
     res.status(500).json({ message: "Error agregando comentario", error });
   }
 };
+
+// ========================
+// VER COMENTARIOS DE UN TICKET
+// ========================
+exports.getTicketComments = async (req, res) => {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .select("comments createdBy")
+      .populate("comments.user", "name");
+
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket no encontrado" });
+    }
+
+    // Seguridad: solo dueño, agente asignado o admin
+    const isOwner = ticket.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
+    const isAgentAssigned =
+      ticket.assignedTo &&
+      ticket.assignedTo.toString() === req.user._id.toString();
+
+    if (!isOwner && !isAdmin && !isAgentAssigned) {
+      return res.status(403).json({ message: "No autorizado" });
+    }
+
+    // Solo datos necesarios
+    const comments = ticket.comments.map(c => ({
+      message: c.message,
+      createdAt: c.createdAt,
+      author: c.user?.name || "Sistema"
+    }));
+
+    res.json(comments);
+  } catch (error) {
+    res.status(500).json({
+      message: "Error obteniendo comentarios",
+      error
+    });
+  }
+};
+
 
 // ========================
 // VER TICKET INDIVIDUAL
