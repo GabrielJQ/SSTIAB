@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const authMiddleware = require("../middlewares/auth.middleware");
+const { authLimiter } = require("../middlewares/rateLimit.middleware");
 
 const {
   getMyProfile,
@@ -16,6 +17,6 @@ router.get("/me", authMiddleware, getMyProfile);
 router.put("/me", authMiddleware, updateMyProfile);
 
 // CAMBIO DE CONTRASEÑA
-router.put("/me/password", authMiddleware, changeMyPassword);
+router.put("/me/password", authMiddleware, authLimiter, changeMyPassword);
 
 module.exports = router;

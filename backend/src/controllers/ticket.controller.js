@@ -1,16 +1,20 @@
 const Ticket = require("../models/ticket");
+const User = require("../models/user");
 const logActivity = require("../utils/activitylogger");
-const { ticketUserDTO } = require("../dtos/ticket.dto");
+const checkTicketAccess = require("../utils/checkTicketAccess");
+const {
+  ticketUserDTO,
+  ticketAgentDTO,
+  ticketAdminDTO
+} = require("../dtos/ticket.dto");
 
 // ========================
-// USER
+// CREATE TICKET (USER)
 // ========================
-
-// Crear ticket
 exports.createTicket = async (req, res) => {
   try {
-    const user = req.user;
     const { description, category } = req.body;
+    const user = req.user;
 
     if (!description || !category) {
       return res.status(400).json({
@@ -21,81 +25,70 @@ exports.createTicket = async (req, res) => {
     const ticket = await Ticket.create({
       description,
       category,
-      priority: "medium",
-      status: "open",
-
       department: user.department,
-
       requesterSnapshot: {
         name: user.name,
         employeeNumber: user.employeeNumber,
         unit: user.unit,
         department: user.department
       },
-
       createdBy: user._id
     });
 
-    await logActivity(
-      user._id,
-      "CREATE_TICKET",
-      ticket._id,
-      `Ticket creado en categoría ${category}`
-    );
+    await logActivity(user._id, "CREATE_TICKET", ticket._id);
 
-    res.status(201).json(ticket);
+    res.status(201).json(ticketUserDTO(ticket));
   } catch (error) {
-    console.error("ERROR CREATE TICKET 👉", error);
-    res.status(500).json({
-      message: "Error creando ticket"
-    });
+    res.status(500).json({ message: "Error creando ticket" });
   }
 };
 
-
-
-// Ver MIS tickets
+// ========================
+// USER: MY TICKETS
+// ========================
 exports.getMyTickets = async (req, res) => {
-  try {
-    const tickets = await Ticket.find({ createdBy: req.user._id })
-      .sort({ createdAt: -1 });
+  const tickets = await Ticket.find({ createdBy: req.user._id })
+    .sort({ createdAt: -1 });
 
-    res.json({
-      total: tickets.length,
-      tickets: tickets.map(ticketUserDTO)
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: "Error obteniendo tickets"
-    });
-  }
+  res.json({
+    total: tickets.length,
+    tickets: tickets.map(ticketUserDTO)
+  });
 };
 
 // ========================
-// AGENT
+// AGENT: ASSIGNED TICKETS
 // ========================
-
-// Tickets asignados al agente
 exports.getAgentTickets = async (req, res) => {
-  try {
-    const tickets = await Ticket.find({ assignedTo: req.user._id })
-      .sort({ createdAt: -1 })
-      .populate("createdBy", "name employeeNumber department");
+  const tickets = await Ticket.find({ assignedTo: req.user._id })
+    .sort({ createdAt: -1 });
 
-    res.json(tickets);
-  } catch (error) {
-    res.status(500).json({ message: "Error obteniendo tickets", error });
-  }
+  res.json(tickets.map(ticketAgentDTO));
 };
 
-// Cambiar estado del ticket
+// ========================
+// UPDATE STATUS (AGENT / ADMIN)
+// ========================
 exports.updateTicketStatus = async (req, res) => {
   try {
     const { status } = req.body;
+    const allowedStatus = ["in_progress", "resolved", "closed"];
+
+    if (!allowedStatus.includes(status)) {
+      return res.status(400).json({ message: "Estado no válido" });
+    }
 
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) {
       return res.status(404).json({ message: "Ticket no encontrado" });
+    }
+
+    // 🔒 Ownership
+    if (
+      req.user.role === "agent" &&
+      ticket.assignedTo?.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ message: "No autorizado" });
     }
 
     if (!["agent", "admin"].includes(req.user.role)) {
@@ -103,68 +96,63 @@ exports.updateTicketStatus = async (req, res) => {
     }
 
     ticket.status = status;
-
-    if (status === "resolved") {
-      ticket.resolvedAt = new Date();
-    }
-
-    if (status === "closed") {
-      ticket.closedAt = new Date();
-    }
+    if (status === "resolved") ticket.resolvedAt = new Date();
+    if (status === "closed") ticket.closedAt = new Date();
 
     await ticket.save();
 
     await logActivity(
       req.user._id,
-      "UPDATE_STATUS",
+      "UPDATE_TICKET_STATUS",
       ticket._id,
       `Estado cambiado a ${status}`
     );
 
-    res.json(ticket);
+    return res.json(
+      req.user.role === "admin"
+        ? ticketAdminDTO(ticket)
+        : ticketAgentDTO(ticket)
+    );
   } catch (error) {
-    res.status(500).json({ message: "Error actualizando ticket", error });
+    res.status(500).json({ message: "Error actualizando ticket" });
   }
 };
 
 // ========================
-// ADMIN
+// ADMIN: ALL TICKETS (CONTROLADO)
 // ========================
-
-// Ver TODOS los tickets (con filtros)
 exports.getAllTickets = async (req, res) => {
-  try {
-    const {
-      status,
-      priority,
-      department,
-      assignedTo,
-      createdBy
-    } = req.query;
+  const { status, priority, department, assignedTo } = req.query;
 
-    const filter = {};
+  const filter = {};
+  if (status) filter.status = status;
+  if (priority) filter.priority = priority;
+  if (department) filter.department = department;
+  if (assignedTo) filter.assignedTo = assignedTo;
 
-    if (status) filter.status = status;
-    if (priority) filter.priority = priority;
-    if (department) filter.department = department;
-    if (assignedTo) filter.assignedTo = assignedTo;
-    if (createdBy) filter.createdBy = createdBy;
+  const tickets = await Ticket.find(filter)
+    .sort({ createdAt: -1 })
+    .populate("assignedTo", "name email role")
+    .populate("createdBy", "name employeeNumber department");
 
-    const tickets = await Ticket.find(filter)
-      .sort({ createdAt: -1 })
-      .populate("createdBy", "name employeeNumber department")
-      .populate("assignedTo", "name email role");
-
-    res.json(tickets);
-  } catch (error) {
-    res.status(500).json({ message: "Error obteniendo tickets", error });
-  }
+  res.json(tickets.map(ticketAdminDTO));
 };
 
-// Asignar ticket a agente
+// ========================
+// ASSIGN TICKET (ADMIN)
+// ========================
 exports.assignTicket = async (req, res) => {
   try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Solo admin puede asignar" });
+    }
+
     const { agentId } = req.body;
+
+    const agent = await User.findById(agentId);
+    if (!agent || agent.role !== "agent") {
+      return res.status(400).json({ message: "Agente inválido" });
+    }
 
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) {
@@ -180,144 +168,82 @@ exports.assignTicket = async (req, res) => {
       req.user._id,
       "ASSIGN_TICKET",
       ticket._id,
-      `Asignado al agente ${agentId}`
+      `Asignado a ${agent.name}`
     );
 
-    res.json(ticket);
+    res.json(ticketAdminDTO(ticket));
   } catch (error) {
-    res.status(500).json({ message: "Error asignando ticket", error });
+    res.status(500).json({ message: "Error asignando ticket" });
   }
 };
 
 // ========================
-// COMMENTS
+// COMMENTS (PENDIENTES DE AMPLIAR)
 // ========================
-
-// Agregar comentario
 exports.addComment = async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    const ticket = await Ticket.findById(req.params.id);
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket no encontrado" });
-    }
-
-    // Permisos: admin, agent asignado o creador
-    if (
-      req.user.role === "user" &&
-      ticket.createdBy.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
-
-    ticket.comments.push({
-      user: req.user._id,
-      message
-    });
-
-    await ticket.save();
-
-    await logActivity(
-      req.user._id,
-      "ADD_COMMENT",
-      ticket._id,
-      "Comentario agregado"
-    );
-
-    res.status(201).json({
-      message: "Comentario agregado",
-      comments: ticket.comments
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Error agregando comentario", error });
+  const ticket = await Ticket.findById(req.params.id);
+  if (!ticket) {
+    return res.status(404).json({ message: "Ticket no encontrado" });
   }
+
+  if (!checkTicketAccess(ticket, req.user)) {
+    return res.status(403).json({ message: "No autorizado" });
+  }
+
+  ticket.comments.push({
+    user: req.user._id,
+    message: req.body.message
+  });
+
+  await ticket.save();
+  await logActivity(req.user._id, "ADD_COMMENT", ticket._id);
+
+  res.status(201).json({ message: "Comentario agregado" });
 };
 
 // ========================
-// VER COMENTARIOS DE UN TICKET
+// GET COMMENTS
 // ========================
 exports.getTicketComments = async (req, res) => {
-  try {
-    const ticket = await Ticket.findById(req.params.id)
-      .select("comments createdBy")
-      .populate("comments.user", "name");
+  const ticket = await Ticket.findById(req.params.id)
+    .populate("comments.user", "name");
 
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket no encontrado" });
-    }
-
-    // Seguridad: solo dueño, agente asignado o admin
-    const isOwner = ticket.createdBy.toString() === req.user._id.toString();
-    const isAdmin = req.user.role === "admin";
-    const isAgentAssigned =
-      ticket.assignedTo &&
-      ticket.assignedTo.toString() === req.user._id.toString();
-
-    if (!isOwner && !isAdmin && !isAgentAssigned) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
-
-    // Solo datos necesarios
-    const comments = ticket.comments.map(c => ({
-      message: c.message,
-      createdAt: c.createdAt,
-      author: c.user?.name || "Sistema"
-    }));
-
-    res.json(comments);
-  } catch (error) {
-    res.status(500).json({
-      message: "Error obteniendo comentarios",
-      error
-    });
+  if (!ticket) {
+    return res.status(404).json({ message: "Ticket no encontrado" });
   }
+
+  if (!checkTicketAccess(ticket, req.user)) {
+    return res.status(403).json({ message: "No autorizado" });
+  }
+
+  res.json(
+    ticket.comments.map(c => ({
+      message: c.message,
+      author: c.user?.name || "Sistema",
+      createdAt: c.createdAt
+    }))
+  );
 };
 
-
 // ========================
-// VER TICKET INDIVIDUAL
+// GET TICKET BY ID
 // ========================
 exports.getTicketById = async (req, res) => {
-  try {
-    const ticket = await Ticket.findById(req.params.id)
-      .populate("createdBy", "name employeeNumber department role")
-      .populate("assignedTo", "name email role")
-      .populate("comments.user", "name role");
+  const ticket = await Ticket.findById(req.params.id)
+    .populate("assignedTo", "name email role")
+    .populate("createdBy", "name employeeNumber department");
 
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket no encontrado" });
-    }
-
-    // 🔒 Permisos
-    if (
-      req.user.role === "user" &&
-      ticket.createdBy._id.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
-
-    if (
-      req.user.role === "agent" &&
-      ticket.assignedTo &&
-      ticket.assignedTo._id.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
-
-    //  Filtrar comentarios internos para usuarios
-    let filteredTicket = ticket.toObject();
-
-    if (req.user.role === "user") {
-      filteredTicket.comments = filteredTicket.comments.filter(
-        c => !c.isInternal
-      );
-    }
-
-    res.json(filteredTicket);
-  } catch (error) {
-    res.status(500).json({ message: "Error obteniendo ticket", error });
+  if (!ticket) {
+    return res.status(404).json({ message: "Ticket no encontrado" });
   }
-};
 
+  if (!checkTicketAccess(ticket, req.user)) {
+    return res.status(403).json({ message: "No autorizado" });
+  }
+
+  if (req.user.role === "admin") return res.json(ticketAdminDTO(ticket));
+  if (req.user.role === "agent") return res.json(ticketAgentDTO(ticket));
+
+  res.json(ticketUserDTO(ticket));
+};
 
